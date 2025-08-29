@@ -49,22 +49,36 @@ class SKSUKiosk {
         const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${this.sheetName}?key=${this.apiKey}`;
         
         try {
+            console.log('Fetching data from:', url);
             const response = await fetch(url);
             const data = await response.json();
+            
+            console.log('Google Sheets response:', data);
             
             if (data.values && data.values.length > 1) {
                 const headers = data.values[0];
                 const rows = data.values.slice(1);
                 
-                this.slides = rows.map(row => {
+                console.log('Headers:', headers);
+                console.log('Rows:', rows);
+                
+                this.slides = rows.map((row, rowIndex) => {
                     const slide = {};
                     headers.forEach((header, index) => {
-                        slide[header.toLowerCase().replace(/\s+/g, '_')] = row[index] || '';
+                        const key = header.toLowerCase().replace(/\s+/g, '_');
+                        slide[key] = row[index] || '';
                     });
+                    console.log(`Slide ${rowIndex}:`, slide);
                     return slide;
                 }).filter(slide => slide.image_url && slide.title);
                 
+                console.log('Processed slides:', this.slides);
                 console.log('Fetched', this.slides.length, 'slides from Google Sheets');
+                
+                if (this.slides.length === 0) {
+                    console.warn('No valid slides found (missing image_url or title)');
+                    this.loadSampleData();
+                }
             } else {
                 console.warn('No data found in Google Sheets, using sample data');
                 this.loadSampleData();
@@ -124,6 +138,9 @@ class SKSUKiosk {
         // Hide loading
         loading.style.display = 'none';
 
+        // Test image URLs for debugging
+        this.testImageUrls();
+
         // Create slides HTML
         this.slides.forEach((slide, index) => {
             const slideElement = this.createSlideElement(slide, index);
@@ -144,8 +161,14 @@ class SKSUKiosk {
         slideDiv.className = 'slide';
         slideDiv.id = `slide-${index}`;
         
+        // Process image URL to handle Google Drive links
+        let imageUrl = this.processImageUrl(slide.image_url);
+        
         slideDiv.innerHTML = `
-            <img src="${slide.image_url}" alt="${slide.title}" onerror="this.src='https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Image'">
+            <img src="${imageUrl}" 
+                 alt="${slide.title}" 
+                 onerror="this.onerror=null; this.src='https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Image'; console.log('Image failed to load:', '${imageUrl}');"
+                 onload="console.log('Image loaded successfully:', '${imageUrl}');">
             <div class="slide-content">
                 <h3>${slide.title}</h3>
                 <p>${slide.description}</p>
@@ -154,6 +177,35 @@ class SKSUKiosk {
         `;
 
         return slideDiv;
+    }
+
+    processImageUrl(url) {
+        if (!url) return 'https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Image';
+        
+        // Handle Google Drive links
+        if (url.includes('drive.google.com')) {
+            // Convert Google Drive sharing link to direct image link
+            const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            if (fileIdMatch) {
+                const fileId = fileIdMatch[1];
+                return `https://drive.google.com/uc?export=view&id=${fileId}`;
+            }
+            
+            // Handle view links
+            const viewMatch = url.match(/id=([a-zA-Z0-9-_]+)/);
+            if (viewMatch) {
+                const fileId = viewMatch[1];
+                return `https://drive.google.com/uc?export=view&id=${fileId}`;
+            }
+        }
+        
+        // Handle Google Photos links (convert to direct link)
+        if (url.includes('photos.google.com') || url.includes('googleusercontent.com')) {
+            return url + '=w800-h400-c';
+        }
+        
+        // For regular URLs, return as is
+        return url;
     }
 
     setupNavigation() {
@@ -713,6 +765,17 @@ class SKSUKiosk {
         } catch (error) {
             console.error('Error refreshing slideshow:', error);
         }
+    }
+
+    // Test function to check image URLs
+    testImageUrls() {
+        console.log('Testing image URLs...');
+        this.slides.forEach((slide, index) => {
+            const img = new Image();
+            img.onload = () => console.log(`✅ Image ${index} loaded successfully:`, slide.image_url);
+            img.onerror = () => console.log(`❌ Image ${index} failed to load:`, slide.image_url);
+            img.src = this.processImageUrl(slide.image_url);
+        });
     }
 }
 
