@@ -68,17 +68,26 @@ class SKSUKiosk {
                     this.slides = rows.map((row, rowIndex) => {
                         const slide = {};
                         headers.forEach((header, index) => {
-                            const key = header.toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '');
+                            const key = header.toLowerCase().replace(/\s+/g, '').replace(/[^\w]/g, '');
                             slide[key] = row[index] || '';
                         });
                         console.log(`📊 Processed slide ${rowIndex + 1}:`, slide);
                         return slide;
-                    }).filter(slide => slide.imageurl && slide.title);
+                    }).filter(slide => slide.title && slide.title.trim() !== '');
                     
                     console.log('✅ Final processed slides:', this.slides);
                     
+                    // Check for slides with missing images
+                    const slidesWithoutImages = this.slides.filter(slide => !slide.imageurl || slide.imageurl.trim() === '');
+                    if (slidesWithoutImages.length > 0) {
+                        console.warn(`⚠️ ${slidesWithoutImages.length} slides have missing image URLs`);
+                        slidesWithoutImages.forEach((slide, index) => {
+                            console.warn(`Slide "${slide.title}" has no image URL - will use placeholder`);
+                        });
+                    }
+                    
                     if (this.slides.length === 0) {
-                        console.warn('⚠️ No valid slides found (missing imageurl or title)');
+                        console.warn('⚠️ No valid slides found (missing title)');
                         throw new Error('No valid slides found in spreadsheet');
                     }
                     return;
@@ -162,7 +171,7 @@ class SKSUKiosk {
                 
                 console.log(`📊 CSV Slide ${rowIndex + 1}:`, slide);
                 return slide;
-            }).filter(slide => slide.imageurl && slide.title);
+            }).filter(slide => slide.title && slide.title.trim() !== '');
             
             console.log('✅ Successfully parsed', this.slides.length, 'slides from CSV');
             return this.slides.length > 0;
@@ -277,14 +286,35 @@ class SKSUKiosk {
         slideDiv.className = 'slide';
         slideDiv.id = `slide-${index}`;
         
-        // Process image URL to handle Google Drive links
+        // Process image URL to handle different URL types
         let imageUrl = this.processImageUrl(slide.imageurl || slide.image_url);
         
+        // If no image URL, use a default SKSU placeholder
+        if (!imageUrl || imageUrl.includes('No+Image')) {
+            imageUrl = 'https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Announcement';
+        }
+        
         slideDiv.innerHTML = `
-            <img src="${imageUrl}" 
-                 alt="${slide.title}" 
-                 onerror="this.onerror=null; this.src='https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Image+Not+Found'; console.log('Image failed to load:', '${imageUrl}');"
-                 onload="console.log('✅ Image loaded successfully:', '${imageUrl}');">
+            <div class="image-container" style="position: relative; background: #f0f0f0;">
+                <div class="image-loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1;">
+                    <div style="width: 40px; height: 40px; border: 4px solid #e3f2fd; border-top: 4px solid #28a745; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                </div>
+                <img src="${imageUrl}" 
+                     alt="${slide.title}" 
+                     style="width: 100%; height: 400px; object-fit: cover; border-radius: 20px 20px 0 0; position: relative; z-index: 2;"
+                     onload="
+                         console.log('✅ Image loaded successfully:', '${imageUrl}');
+                         this.previousElementSibling.style.display = 'none';
+                         this.style.opacity = '1';
+                     "
+                     onerror="
+                         console.log('❌ Image failed to load:', '${imageUrl}');
+                         this.src='https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Image+Not+Available';
+                         this.previousElementSibling.style.display = 'none';
+                         this.style.opacity = '1';
+                     "
+                     style="opacity: 0; transition: opacity 0.3s ease;">
+            </div>
             <div class="slide-content">
                 <h3>${slide.title}</h3>
                 <p>${slide.description}</p>
@@ -304,21 +334,98 @@ class SKSUKiosk {
         url = url.trim();
         console.log('🔍 Processing image URL:', url);
         
-        // Handle Google Drive links - multiple formats
+        // Handle Yahoo image search URLs
+        if (url.includes('images.search.yahoo.com')) {
+            try {
+                const urlParams = new URLSearchParams(url.split('?')[1]);
+                let imageUrl = '';
+                
+                if (urlParams.has('imgurl')) {
+                    imageUrl = decodeURIComponent(urlParams.get('imgurl'));
+                } else if (urlParams.has('p')) {
+                    const pParam = urlParams.get('p');
+                    if (pParam && pParam.startsWith('http')) {
+                        imageUrl = pParam;
+                    }
+                }
+                
+                if (imageUrl && this.isValidImageUrl(imageUrl)) {
+                    console.log('✅ Extracted image URL from Yahoo search:', imageUrl);
+                    return imageUrl;
+                }
+            } catch (error) {
+                console.log('❌ Error processing Yahoo search URL:', error);
+            }
+        }
+        
+        // Handle Google image search URLs
+        if (url.includes('images.google.com') || url.includes('www.google.com/imgres')) {
+            try {
+                const urlParams = new URLSearchParams(url.split('?')[1]);
+                let imageUrl = '';
+                
+                if (urlParams.has('imgurl')) {
+                    imageUrl = decodeURIComponent(urlParams.get('imgurl'));
+                } else if (urlParams.has('url')) {
+                    imageUrl = decodeURIComponent(urlParams.get('url'));
+                }
+                
+                if (imageUrl && this.isValidImageUrl(imageUrl)) {
+                    console.log('✅ Extracted image URL from Google search:', imageUrl);
+                    return imageUrl;
+                }
+            } catch (error) {
+                console.log('❌ Error processing Google search URL:', error);
+            }
+        }
+        
+        // Handle Bing image search URLs
+        if (url.includes('bing.com/images')) {
+            try {
+                const urlParams = new URLSearchParams(url.split('?')[1]);
+                if (urlParams.has('mediaurl')) {
+                    const imageUrl = decodeURIComponent(urlParams.get('mediaurl'));
+                    if (this.isValidImageUrl(imageUrl)) {
+                        console.log('✅ Extracted image URL from Bing search:', imageUrl);
+                        return imageUrl;
+                    }
+                }
+            } catch (error) {
+                console.log('❌ Error processing Bing search URL:', error);
+            }
+        }
+        
+        // Enhanced Google Drive handling - multiple formats
         if (url.includes('drive.google.com')) {
-            // Extract file ID from various Google Drive URL formats
             let fileId = '';
             
-            // Format 1: https://drive.google.com/file/d/FILE_ID/view
-            const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-            if (fileIdMatch) {
-                fileId = fileIdMatch[1];
+            // Method 1: Extract from /file/d/FILE_ID/view format
+            let match = url.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
+            if (match) {
+                fileId = match[1];
             }
-            // Format 2: https://drive.google.com/open?id=FILE_ID
-            else {
-                const viewMatch = url.match(/id=([a-zA-Z0-9-_]+)/);
-                if (viewMatch) {
-                    fileId = viewMatch[1];
+            
+            // Method 2: Extract from /open?id=FILE_ID format
+            if (!fileId) {
+                match = url.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+                if (match) {
+                    fileId = match[1];
+                }
+            }
+            
+            // Method 3: Extract from /uc?id=FILE_ID format
+            if (!fileId) {
+                match = url.match(/\/uc\?.*id=([a-zA-Z0-9-_]+)/);
+                if (match) {
+                    fileId = match[1];
+                }
+            }
+            
+            // Method 4: Extract from sharing URL format
+            if (!fileId) {
+                match = url.match(/\/d\/([a-zA-Z0-9-_]+)\/view/);
+                if (match) {
+                    fileId = match[1];
                 }
             }
             
@@ -328,26 +435,241 @@ class SKSUKiosk {
                 return directUrl;
             } else {
                 console.log('❌ Could not extract Google Drive file ID from:', url);
-                return url;
             }
         }
         
         // Handle Google Photos links
-        if (url.includes('photos.google.com') || url.includes('googleusercontent.com')) {
-            console.log('✅ Google Photos URL detected');
-            return url.includes('=') ? url : url + '=w800-h400-c';
+        if (url.includes('photos.google.com') || url.includes('photos.app.goo.gl')) {
+            console.log('⚠️ Google Photos sharing URL detected - may require public access');
+            // Try to extract direct photo URL if available
+            if (url.includes('googleusercontent.com')) {
+                return url.includes('=') ? url : url + '=w800-h400-c';
+            }
+            return url;
         }
         
-        // Handle other cloud storage services
-        if (url.includes('dropbox.com') && !url.includes('dl=1')) {
-            const directUrl = url.replace('dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '');
-            console.log('✅ Converted Dropbox URL:', directUrl);
-            return directUrl;
+        // Enhanced Dropbox handling
+        if (url.includes('dropbox.com')) {
+            // Convert sharing URL to direct URL
+            if (url.includes('/s/') && !url.includes('?dl=1')) {
+                const directUrl = url.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '').replace(/\?.*$/, '');
+                console.log('✅ Converted Dropbox sharing URL:', directUrl);
+                return directUrl;
+            } else if (url.includes('?dl=0')) {
+                const directUrl = url.replace('?dl=0', '?dl=1');
+                console.log('✅ Converted Dropbox URL to direct download:', directUrl);
+                return directUrl;
+            }
+        }
+        
+        // Handle OneDrive/SharePoint links
+        if (url.includes('onedrive.live.com') || url.includes('1drv.ms') || url.includes('sharepoint.com')) {
+            // Convert OneDrive sharing URL to direct thumbnail
+            if (url.includes('onedrive.live.com')) {
+                try {
+                    const directUrl = url.replace('view.aspx', 'download.aspx').replace('redir?', 'download?');
+                    console.log('✅ Converted OneDrive URL:', directUrl);
+                    return directUrl;
+                } catch (error) {
+                    console.log('❌ Error converting OneDrive URL:', error);
+                }
+            }
+        }
+        
+        // Handle iCloud shared links
+        if (url.includes('icloud.com')) {
+            console.log('⚠️ iCloud sharing URL detected - may require manual download');
+            return url;
+        }
+        
+        // Handle Imgur links
+        if (url.includes('imgur.com') && !url.includes('i.imgur.com')) {
+            // Convert imgur page URL to direct image URL
+            const imgurMatch = url.match(/imgur\.com\/([a-zA-Z0-9]+)/);
+            if (imgurMatch) {
+                const directUrl = `https://i.imgur.com/${imgurMatch[1]}.jpg`;
+                console.log('✅ Converted Imgur URL:', directUrl);
+                return directUrl;
+            }
+        }
+        
+        // Handle Instagram image URLs
+        if (url.includes('instagram.com')) {
+            console.log('⚠️ Instagram URL detected - may require special handling');
+            // Instagram URLs usually need to be accessed differently due to their API restrictions
+            return this.generatePlaceholderImage('Instagram image - please use direct image URL');
+        }
+        
+        // Handle Facebook image URLs
+        if (url.includes('facebook.com') || url.includes('fbcdn.net')) {
+            console.log('⚠️ Facebook URL detected');
+            if (url.includes('fbcdn.net')) {
+                console.log('✅ Direct Facebook CDN URL detected');
+                return url;
+            } else {
+                return this.generatePlaceholderImage('Facebook image - please use direct image URL');
+            }
+        }
+        
+        // Handle WeTransfer links
+        if (url.includes('wetransfer.com')) {
+            console.log('⚠️ WeTransfer URL detected - temporary download link');
+            return this.generatePlaceholderImage('WeTransfer - please use permanent image URL');
+        }
+        
+        // Handle MediaFire links
+        if (url.includes('mediafire.com')) {
+            console.log('⚠️ MediaFire URL detected - may need direct link');
+            return url;
+        }
+        
+        // Handle GitHub raw content
+        if (url.includes('github.com') && !url.includes('raw.githubusercontent.com')) {
+            // Convert GitHub file URL to raw content URL
+            const rawUrl = url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+            console.log('✅ Converted GitHub URL to raw content:', rawUrl);
+            return rawUrl;
+        }
+        
+        // Handle Unsplash images
+        if (url.includes('unsplash.com')) {
+            // Extract Unsplash photo ID and create optimized URL
+            const unsplashMatch = url.match(/photos\/([a-zA-Z0-9_-]+)/);
+            if (unsplashMatch) {
+                const directUrl = `https://images.unsplash.com/photo-${unsplashMatch[1]}?w=800&h=400&fit=crop`;
+                console.log('✅ Converted Unsplash URL:', directUrl);
+                return directUrl;
+            }
+        }
+        
+        // Handle Flickr images
+        if (url.includes('flickr.com')) {
+            console.log('⚠️ Flickr URL detected - may need API access for high-res images');
+            return url;
+        }
+        
+        // Handle Pinterest images
+        if (url.includes('pinterest.com')) {
+            console.log('⚠️ Pinterest URL detected - extracting image if possible');
+            // Pinterest URLs often contain the actual image URL in parameters
+            const match = url.match(/url=([^&]+)/);
+            if (match) {
+                const decodedUrl = decodeURIComponent(match[1]);
+                if (this.isValidImageUrl(decodedUrl)) {
+                    console.log('✅ Extracted image from Pinterest URL:', decodedUrl);
+                    return decodedUrl;
+                }
+            }
+        }
+        
+        // Check if it's already a direct image URL
+        if (this.isValidImageUrl(url)) {
+            console.log('✅ Direct image URL detected:', url);
+            return url;
+        }
+        
+        // For URLs that might be web pages with images, generate placeholder
+        if (url.startsWith('http') && !this.isValidImageUrl(url)) {
+            console.log('⚠️ Web page URL detected, generating placeholder');
+            return this.generatePlaceholderImage(url);
         }
         
         // For regular URLs, return as is
         console.log('✅ Using URL as-is:', url);
         return url;
+    }
+    
+    isValidImageUrl(url) {
+        if (!url) return false;
+        
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.ico'];
+        const urlLower = url.toLowerCase();
+        
+        // Check for direct image file extensions
+        if (imageExtensions.some(ext => urlLower.includes(ext))) {
+            return true;
+        }
+        
+        // Check for image hosting domains and CDNs
+        const imageHosts = [
+            // Image hosting services
+            'imgur.com',
+            'i.imgur.com',
+            'images.unsplash.com',
+            'pixabay.com',
+            'pexels.com',
+            'flickr.com',
+            'staticflickr.com',
+            
+            // Google services
+            'googleusercontent.com',
+            'drive.google.com',
+            'lh3.googleusercontent.com',
+            'lh4.googleusercontent.com',
+            'lh5.googleusercontent.com',
+            'lh6.googleusercontent.com',
+            
+            // Social media CDNs
+            'fbcdn.net',
+            'twimg.com',
+            'cdninstagram.com',
+            'scontent.xx.fbcdn.net',
+            
+            // Cloud storage
+            'dropbox.com',
+            'dl.dropboxusercontent.com',
+            'onedrive.live.com',
+            '1drv.ms',
+            
+            // CDNs and hosting
+            'cloudinary.com',
+            'amazonaws.com',
+            'cloudfront.net',
+            'fastly.com',
+            'jsdelivr.net',
+            'github.com',
+            'raw.githubusercontent.com',
+            
+            // Other image services
+            'tinypic.com',
+            'photobucket.com',
+            'imageshack.us',
+            'postimg.cc',
+            'imgbb.com',
+            'ibb.co',
+            'via.placeholder.com',
+            'placeholder.com',
+            'picsum.photos',
+            
+            // Stock photo sites
+            'shutterstock.com',
+            'gettyimages.com',
+            'istockphoto.com',
+            'alamy.com',
+            
+            // Blog/CMS image URLs
+            'wordpress.com',
+            'blogger.com',
+            'medium.com',
+            'squarespace.com',
+            'wix.com',
+            'weebly.com'
+        ];
+        
+        const hasImageHost = imageHosts.some(host => urlLower.includes(host));
+        
+        // Additional checks for URLs that look like images
+        const hasImageParams = urlLower.includes('image') || urlLower.includes('photo') || urlLower.includes('picture');
+        const hasImageFormat = /\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff|ico)(\?|$|#)/i.test(url);
+        
+        return hasImageHost || hasImageFormat || hasImageParams;
+    }
+    
+    generatePlaceholderImage(originalUrl) {
+        // Create a more informative placeholder
+        const shortUrl = originalUrl.length > 30 ? originalUrl.substring(0, 30) + '...' : originalUrl;
+        const encodedText = encodeURIComponent(`SKSU - Image from: ${shortUrl}`);
+        return `https://via.placeholder.com/800x400/28a745/ffffff?text=${encodedText}`;
     }
 
     setupNavigation() {
@@ -1015,6 +1337,141 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Example Data Row: https://drive.google.com/... | Event description | Event Title | 001');
             console.log('\n🌐 Your Spreadsheet URL:');
             console.log(`https://docs.google.com/spreadsheets/d/${kiosk.spreadsheetId}/edit`);
+        },
+        
+        testImageUrl: (url) => {
+            console.log('\n🧪 TESTING IMAGE URL CONVERSION:');
+            console.log('📥 Original URL:', url);
+            
+            const convertedUrl = kiosk.processImageUrl(url);
+            console.log('📤 Converted URL:', convertedUrl);
+            
+            const isValid = kiosk.isValidImageUrl(convertedUrl);
+            console.log('✅ Is Valid Image:', isValid);
+            
+            // Test the image by creating a temporary image element
+            const testImg = new Image();
+            testImg.onload = () => {
+                console.log('🖼️ Image loads successfully!');
+                console.log('📏 Image dimensions:', testImg.naturalWidth + 'x' + testImg.naturalHeight);
+            };
+            testImg.onerror = () => {
+                console.log('❌ Image failed to load');
+                console.log('🔍 Try checking if the URL requires authentication or has CORS restrictions');
+            };
+            testImg.src = convertedUrl;
+            
+            return {
+                original: url,
+                converted: convertedUrl,
+                isValid: isValid
+            };
+        },
+        
+        testAllImages: () => {
+            console.log('\n🧪 TESTING ALL CURRENT SLIDE IMAGES:');
+            if (kiosk.slides.length === 0) {
+                console.log('❌ No slides loaded. Try kioskDebug.refreshData() first.');
+                return;
+            }
+            
+            kiosk.slides.forEach((slide, index) => {
+                console.log(`\n--- Slide ${index + 1}: ${slide.title} ---`);
+                const imageUrl = slide.imageurl || slide.image_url;
+                if (imageUrl) {
+                    kioskDebug.testImageUrl(imageUrl);
+                } else {
+                    console.log('❌ No image URL found for this slide');
+                }
+            });
+        },
+        
+        testUrlTypes: () => {
+            console.log('\n🧪 TESTING VARIOUS URL TYPES:');
+            
+            const testUrls = [
+                // Google Drive examples
+                {
+                    name: 'Google Drive - /file/d/ format',
+                    url: 'https://drive.google.com/file/d/1ABC123xyz/view?usp=sharing'
+                },
+                {
+                    name: 'Google Drive - /open?id= format', 
+                    url: 'https://drive.google.com/open?id=1ABC123xyz'
+                },
+                {
+                    name: 'Google Drive - uc export format (already correct)',
+                    url: 'https://drive.google.com/uc?export=view&id=1_eyhbQb8nYXUOU9FZzU_Kx_Q3f_Z-vZ0'
+                },
+                
+                // Dropbox examples
+                {
+                    name: 'Dropbox - sharing link',
+                    url: 'https://www.dropbox.com/s/abc123/image.jpg?dl=0'
+                },
+                {
+                    name: 'Dropbox - direct link',
+                    url: 'https://dropbox.com/s/abc123/photo.png'
+                },
+                
+                // OneDrive examples
+                {
+                    name: 'OneDrive - view link',
+                    url: 'https://onedrive.live.com/view.aspx?resid=ABC123&ithint=file%2cjpg'
+                },
+                {
+                    name: 'OneDrive - short link',
+                    url: 'https://1drv.ms/i/s!ABC123'
+                },
+                
+                // Imgur examples
+                {
+                    name: 'Imgur - page link',
+                    url: 'https://imgur.com/ABC123'
+                },
+                {
+                    name: 'Imgur - direct image',
+                    url: 'https://i.imgur.com/ABC123.jpg'
+                },
+                
+                // GitHub examples
+                {
+                    name: 'GitHub - blob link',
+                    url: 'https://github.com/user/repo/blob/main/image.png'
+                },
+                {
+                    name: 'GitHub - raw link',
+                    url: 'https://raw.githubusercontent.com/user/repo/main/image.png'
+                },
+                
+                // Search engine examples
+                {
+                    name: 'Yahoo Image Search',
+                    url: 'https://images.search.yahoo.com/images/view?back=...&imgurl=https%3A%2F%2Fexample.com%2Fimage.jpg'
+                },
+                {
+                    name: 'Google Image Search',
+                    url: 'https://www.google.com/imgres?imgurl=https%3A%2F%2Fexample.com%2Fimage.jpg'
+                },
+                
+                // Direct image examples
+                {
+                    name: 'Direct Image - JPG',
+                    url: 'https://example.com/image.jpg'
+                },
+                {
+                    name: 'Direct Image - CDN',
+                    url: 'https://cdn.example.com/photos/12345.png'
+                }
+            ];
+            
+            testUrls.forEach(testCase => {
+                console.log(`\n🔗 ${testCase.name}:`);
+                console.log('   Input:', testCase.url);
+                const result = kiosk.processImageUrl(testCase.url);
+                console.log('   Output:', result);
+                console.log('   Valid:', kiosk.isValidImageUrl(result));
+            });
         }
     };
     
@@ -1023,6 +1480,9 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('🔄 kioskDebug.refreshData() - Force refresh slideshow data');
     console.log('📊 kioskDebug.showCurrentSlides() - Show current slides data');
     console.log('📋 kioskDebug.checkSpreadsheetFormat() - Show expected format');
+    console.log('🖼️ kioskDebug.testImageUrl(url) - Test image URL conversion');
+    console.log('🖼️ kioskDebug.testAllImages() - Test all current slide images');
+    console.log('🧪 kioskDebug.testUrlTypes() - Test various URL conversion examples');
     
     // Refresh slideshow data every 10 minutes
     setInterval(() => {
