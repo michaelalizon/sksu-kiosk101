@@ -45,85 +45,201 @@ class SKSUKiosk {
     }
 
     async fetchSlideshowData() {
-        // Fetch data from Google Sheets
-        const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${this.sheetName}?key=${this.apiKey}`;
+        console.log('🔄 Attempting to fetch data from Google Sheets...');
+        
+        // Method 1: Try API key method first (most reliable for private sheets)
+        const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/Main?key=${this.apiKey}`;
         
         try {
-            console.log('Fetching data from:', url);
-            const response = await fetch(url);
-            const data = await response.json();
+            console.log('� Trying API key method:', apiUrl);
+            const response = await fetch(apiUrl);
             
-            console.log('Google Sheets response:', data);
-            
-            if (data.values && data.values.length > 1) {
-                const headers = data.values[0];
-                const rows = data.values.slice(1);
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ Google Sheets API response:', data);
                 
-                console.log('Headers:', headers);
-                console.log('Rows:', rows);
-                
-                this.slides = rows.map((row, rowIndex) => {
-                    const slide = {};
-                    headers.forEach((header, index) => {
-                        const key = header.toLowerCase().replace(/\s+/g, '_');
-                        slide[key] = row[index] || '';
-                    });
-                    console.log(`Slide ${rowIndex}:`, slide);
-                    return slide;
-                }).filter(slide => slide.image_url && slide.title);
-                
-                console.log('Processed slides:', this.slides);
-                console.log('Fetched', this.slides.length, 'slides from Google Sheets');
-                
-                if (this.slides.length === 0) {
-                    console.warn('No valid slides found (missing image_url or title)');
-                    this.loadSampleData();
+                if (data.values && data.values.length > 1) {
+                    const headers = data.values[0];
+                    const rows = data.values.slice(1);
+                    
+                    console.log('📋 Headers found:', headers);
+                    console.log('📊 Data rows:', rows.length);
+                    
+                    this.slides = rows.map((row, rowIndex) => {
+                        const slide = {};
+                        headers.forEach((header, index) => {
+                            const key = header.toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '');
+                            slide[key] = row[index] || '';
+                        });
+                        console.log(`📊 Processed slide ${rowIndex + 1}:`, slide);
+                        return slide;
+                    }).filter(slide => slide.imageurl && slide.title);
+                    
+                    console.log('✅ Final processed slides:', this.slides);
+                    
+                    if (this.slides.length === 0) {
+                        console.warn('⚠️ No valid slides found (missing imageurl or title)');
+                        throw new Error('No valid slides found in spreadsheet');
+                    }
+                    return;
+                } else {
+                    throw new Error('No data found in spreadsheet');
                 }
             } else {
-                console.warn('No data found in Google Sheets, using sample data');
+                const errorData = await response.json();
+                console.error('❌ API Error:', errorData);
+                throw new Error(`API Error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('❌ API key method failed:', error);
+        }
+        
+        // Method 2: Try to find the correct sheet ID
+        try {
+            console.log('🔍 Trying to get sheet metadata...');
+            const metadataUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}?key=${this.apiKey}`;
+            const metaResponse = await fetch(metadataUrl);
+            
+            if (metaResponse.ok) {
+                const metadata = await metaResponse.json();
+                console.log('📋 Spreadsheet metadata:', metadata);
+                
+                // Find the "Main" sheet
+                const mainSheet = metadata.sheets?.find(sheet => 
+                    sheet.properties?.title?.toLowerCase() === 'main'
+                );
+                
+                if (mainSheet) {
+                    const sheetId = mainSheet.properties.sheetId;
+                    console.log('✅ Found Main sheet with ID:', sheetId);
+                    
+                    // Try CSV export with correct sheet ID
+                    const csvUrl = `https://docs.google.com/spreadsheets/d/${this.spreadsheetId}/export?format=csv&gid=${sheetId}`;
+                    console.log('📄 Trying CSV with correct sheet ID:', csvUrl);
+                    
+                    const csvResponse = await fetch(csvUrl);
+                    if (csvResponse.ok) {
+                        const csvText = await csvResponse.text();
+                        console.log('✅ CSV data received:', csvText.substring(0, 200));
+                        
+                        if (this.parseCSVData(csvText)) {
+                            console.log('✅ Successfully parsed CSV data');
+                            return;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.log('❌ Metadata method failed:', error);
+        }
+        
+        console.error('❌ All connection methods failed');
+        throw new Error('Unable to connect to Google Sheets');
+    }
+
+    parseCSVData(csvText) {
+        try {
+            const lines = csvText.split('\n').filter(line => line.trim());
+            if (lines.length < 2) {
+                console.log('❌ Not enough data in CSV');
+                return false;
+            }
+            
+            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+            console.log('📋 CSV Headers found:', headers);
+            
+            const dataRows = lines.slice(1);
+            console.log('📊 CSV Data rows:', dataRows.length);
+            
+            this.slides = dataRows.map((line, rowIndex) => {
+                const values = this.parseCSVLine(line);
+                const slide = {};
+                
+                headers.forEach((header, index) => {
+                    const key = header.toLowerCase().replace(/\s+/g, '').replace(/[^\w]/g, '');
+                    slide[key] = values[index] || '';
+                });
+                
+                console.log(`📊 CSV Slide ${rowIndex + 1}:`, slide);
+                return slide;
+            }).filter(slide => slide.imageurl && slide.title);
+            
+            console.log('✅ Successfully parsed', this.slides.length, 'slides from CSV');
+            return this.slides.length > 0;
+        } catch (error) {
+            console.error('❌ Error parsing CSV:', error);
+            return false;
+        }
+    }
+
+    parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        
+        result.push(current.trim());
+        return result;
+    }
+
+    parseGoogleSheetsData(data) {
+        try {
+            const rows = data.table.rows;
+            if (rows.length < 2) {
+                console.warn('Not enough data rows');
+                this.loadSampleData();
+                return;
+            }
+            
+            // First row contains headers
+            const headers = rows[0].c.map(cell => cell ? cell.v : '');
+            console.log('Headers from public access:', headers);
+            
+            // Subsequent rows contain data
+            const dataRows = rows.slice(1);
+            
+            this.slides = dataRows.map((row, rowIndex) => {
+                const slide = {};
+                row.c.forEach((cell, index) => {
+                    if (headers[index]) {
+                        const key = headers[index].toLowerCase().replace(/\s+/g, '_');
+                        slide[key] = cell ? cell.v : '';
+                    }
+                });
+                console.log(`Slide ${rowIndex} from public access:`, slide);
+                return slide;
+            }).filter(slide => slide.image_url && slide.title);
+            
+            console.log('Processed slides from public access:', this.slides);
+            console.log('Successfully fetched', this.slides.length, 'slides from Google Sheets (public)');
+            
+            if (this.slides.length === 0) {
+                console.warn('No valid slides found from public access');
                 this.loadSampleData();
             }
         } catch (error) {
-            console.error('Error fetching Google Sheets data:', error);
-            console.log('Falling back to sample data');
+            console.error('Error parsing public Google Sheets data:', error);
             this.loadSampleData();
         }
     }
 
     loadSampleData() {
-        // Sample data as fallback
-        this.slides = [
-            {
-                image_url: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&h=400&fit=crop',
-                title: 'Electronics Engineers Licensure Exam Success',
-                description: 'Congratulations to ENGR. MON NATHANIEL L. BESANA for achieving TOP 2 (94.00%) in the April 2025 Electronics Engineers Licensure Examination! We are proud of our outstanding graduates.',
-                campus_id: 'SKSU Main Campus'
-            },
-            {
-                image_url: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&h=400&fit=crop',
-                title: 'New Academic Year 2025-2026 Enrollment',
-                description: 'Enrollment for Academic Year 2025-2026 is now open! Join Sultan Kudarat State University and be part of our growing community of scholars and innovators.',
-                campus_id: 'SKSU Main Campus'
-            },
-            {
-                image_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&h=400&fit=crop',
-                title: 'Research Excellence Awards 2025',
-                description: 'SKSU faculty and students receive recognition for outstanding research contributions in agriculture, engineering, and social sciences. Innovation continues to drive our mission.',
-                campus_id: 'SKSU Research Center'
-            },
-            {
-                image_url: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=800&h=400&fit=crop',
-                title: 'Community Extension Program Launch',
-                description: 'SKSU launches new community extension programs focusing on sustainable agriculture and skills development for local communities in Sultan Kudarat province.',
-                campus_id: 'SKSU Extension Office'
-            },
-            {
-                image_url: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&h=400&fit=crop',
-                title: 'New Laboratory Facilities Opened',
-                description: 'State-of-the-art computer and engineering laboratories now available for student use. Enhanced learning facilities support our commitment to quality education.',
-                campus_id: 'SKSU College of Engineering'
-            }
-        ];
+        // No sample data - force connection to Google Sheets
+        console.log('❌ Sample data disabled - must connect to Google Sheets');
+        this.slides = [];
+        this.showSlideshowError();
     }
 
     setupSlideshow() {
@@ -162,17 +278,17 @@ class SKSUKiosk {
         slideDiv.id = `slide-${index}`;
         
         // Process image URL to handle Google Drive links
-        let imageUrl = this.processImageUrl(slide.image_url);
+        let imageUrl = this.processImageUrl(slide.imageurl || slide.image_url);
         
         slideDiv.innerHTML = `
             <img src="${imageUrl}" 
                  alt="${slide.title}" 
-                 onerror="this.onerror=null; this.src='https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Image'; console.log('Image failed to load:', '${imageUrl}');"
-                 onload="console.log('Image loaded successfully:', '${imageUrl}');">
+                 onerror="this.onerror=null; this.src='https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Image+Not+Found'; console.log('Image failed to load:', '${imageUrl}');"
+                 onload="console.log('✅ Image loaded successfully:', '${imageUrl}');">
             <div class="slide-content">
                 <h3>${slide.title}</h3>
                 <p>${slide.description}</p>
-                <div class="campus-info">${slide.campus_id}</div>
+                <div class="campus-info">${slide.campusid || slide.campus_id}</div>
             </div>
         `;
 
@@ -180,31 +296,57 @@ class SKSUKiosk {
     }
 
     processImageUrl(url) {
-        if (!url) return 'https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Image';
+        if (!url || url.trim() === '') {
+            console.log('⚠️ Empty image URL provided');
+            return 'https://via.placeholder.com/800x400/28a745/ffffff?text=No+Image';
+        }
         
-        // Handle Google Drive links
+        url = url.trim();
+        console.log('🔍 Processing image URL:', url);
+        
+        // Handle Google Drive links - multiple formats
         if (url.includes('drive.google.com')) {
-            // Convert Google Drive sharing link to direct image link
+            // Extract file ID from various Google Drive URL formats
+            let fileId = '';
+            
+            // Format 1: https://drive.google.com/file/d/FILE_ID/view
             const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
             if (fileIdMatch) {
-                const fileId = fileIdMatch[1];
-                return `https://drive.google.com/uc?export=view&id=${fileId}`;
+                fileId = fileIdMatch[1];
+            }
+            // Format 2: https://drive.google.com/open?id=FILE_ID
+            else {
+                const viewMatch = url.match(/id=([a-zA-Z0-9-_]+)/);
+                if (viewMatch) {
+                    fileId = viewMatch[1];
+                }
             }
             
-            // Handle view links
-            const viewMatch = url.match(/id=([a-zA-Z0-9-_]+)/);
-            if (viewMatch) {
-                const fileId = viewMatch[1];
-                return `https://drive.google.com/uc?export=view&id=${fileId}`;
+            if (fileId) {
+                const directUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                console.log('✅ Converted Google Drive URL:', directUrl);
+                return directUrl;
+            } else {
+                console.log('❌ Could not extract Google Drive file ID from:', url);
+                return url;
             }
         }
         
-        // Handle Google Photos links (convert to direct link)
+        // Handle Google Photos links
         if (url.includes('photos.google.com') || url.includes('googleusercontent.com')) {
-            return url + '=w800-h400-c';
+            console.log('✅ Google Photos URL detected');
+            return url.includes('=') ? url : url + '=w800-h400-c';
+        }
+        
+        // Handle other cloud storage services
+        if (url.includes('dropbox.com') && !url.includes('dl=1')) {
+            const directUrl = url.replace('dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '');
+            console.log('✅ Converted Dropbox URL:', directUrl);
+            return directUrl;
         }
         
         // For regular URLs, return as is
+        console.log('✅ Using URL as-is:', url);
         return url;
     }
 
@@ -293,7 +435,22 @@ class SKSUKiosk {
         const container = document.getElementById('slideshowContainer');
         container.innerHTML = `
             <div class="slideshow-loading">
-                <span style="color: #dc3545;">⚠️ Unable to load announcements. Please check your connection.</span>
+                <div style="text-align: center; padding: 2rem;">
+                    <h3 style="color: #dc3545; margin-bottom: 1rem;">⚠️ Unable to Connect to Google Sheets</h3>
+                    <p style="margin-bottom: 1rem;">Please ensure:</p>
+                    <ul style="text-align: left; display: inline-block;">
+                        <li>Your spreadsheet is public (anyone with link can view)</li>
+                        <li>The "Main" sheet exists with data</li>
+                        <li>Column headers: Image URL | Description | Title | Campus_ID</li>
+                    </ul>
+                    <p style="margin-top: 1rem;">
+                        <a href="https://docs.google.com/spreadsheets/d/1f74bbovZFgzWKTJnha4XEESEu6qWfBVLmMVu0XZvdYw/edit" 
+                           target="_blank" style="color: #28a745;">Open Your Spreadsheet</a>
+                    </p>
+                    <button onclick="kioskDebug.testConnection()" style="background: #28a745; color: white; padding: 0.5rem 1rem; border: none; border-radius: 5px; margin-top: 1rem; cursor: pointer;">
+                        Test Connection
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -782,6 +939,90 @@ class SKSUKiosk {
 // Initialize the kiosk when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     const kiosk = new SKSUKiosk();
+    
+    // Make kiosk globally accessible for debugging
+    window.kioskDebug = {
+        kiosk: kiosk,
+        testConnection: async () => {
+            console.log('\n🔧 TESTING CONNECTION TO GOOGLE SHEETS...');
+            console.log('📋 Spreadsheet ID:', kiosk.spreadsheetId);
+            console.log('📋 API Key:', kiosk.apiKey ? 'Provided ✅' : 'Missing ❌');
+            
+            // Test 1: Check spreadsheet URL
+            const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${kiosk.spreadsheetId}/edit`;
+            console.log('🌐 Spreadsheet URL:', spreadsheetUrl);
+            console.log('👆 Please verify this URL is accessible');
+            
+            // Test 2: Try API key method (most reliable)
+            const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${kiosk.spreadsheetId}/values/Main?key=${kiosk.apiKey}`;
+            console.log('\n🧪 Testing API Key Method...');
+            try {
+                const response = await fetch(apiUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('✅ API Key SUCCESS!');
+                    console.log('📋 Headers:', data.values[0]);
+                    console.log('📊 Total rows:', data.values.length);
+                    console.log('📄 Sample data:', data.values.slice(0, 3));
+                } else {
+                    const errorData = await response.json();
+                    console.log('❌ API Key FAILED:', errorData);
+                }
+            } catch (error) {
+                console.log('❌ API Key ERROR:', error);
+            }
+            
+            // Test 3: Force refresh to see if it works
+            console.log('\n🔄 Forcing data refresh...');
+            try {
+                await kiosk.fetchSlideshowData();
+                console.log('✅ Data fetch completed, slides:', kiosk.slides.length);
+                kiosk.slides.forEach((slide, index) => {
+                    console.log(`Slide ${index + 1}:`, {
+                        title: slide.title,
+                        imageurl: slide.imageurl,
+                        description: slide.description?.substring(0, 50) + '...'
+                    });
+                });
+            } catch (error) {
+                console.log('❌ Data fetch failed:', error);
+            }
+            
+            console.log('\n📝 TROUBLESHOOTING CHECKLIST:');
+            console.log('1. ✅ Spreadsheet is shared publicly');
+            console.log('2. ✅ Sheet name is "Main"');
+            console.log('3. ✅ Headers: Image URL | Description | Title | Campus_ID');
+            console.log('4. ✅ API key is valid');
+            console.log('5. 🔄 Try: kioskDebug.refreshData()');
+        },
+        refreshData: async () => {
+            console.log('\n🔄 FORCING DATA REFRESH...');
+            kiosk.slides = [];
+            await kiosk.init();
+            console.log('✅ Refresh complete');
+        },
+        showCurrentSlides: () => {
+            console.log('\n📊 CURRENT SLIDES DATA:');
+            console.log('Total slides:', kiosk.slides.length);
+            kiosk.slides.forEach((slide, index) => {
+                console.log(`Slide ${index + 1}:`, slide);
+            });
+        },
+        checkSpreadsheetFormat: () => {
+            console.log('\n📋 EXPECTED SPREADSHEET FORMAT:');
+            console.log('Sheet Name: Main');
+            console.log('Headers (Row 1): Image URL | Description | Title | Campus_ID');
+            console.log('Example Data Row: https://drive.google.com/... | Event description | Event Title | 001');
+            console.log('\n🌐 Your Spreadsheet URL:');
+            console.log(`https://docs.google.com/spreadsheets/d/${kiosk.spreadsheetId}/edit`);
+        }
+    };
+    
+    console.log('Debug functions available:');
+    console.log('🔧 kioskDebug.testConnection() - Comprehensive connection test');
+    console.log('🔄 kioskDebug.refreshData() - Force refresh slideshow data');
+    console.log('📊 kioskDebug.showCurrentSlides() - Show current slides data');
+    console.log('📋 kioskDebug.checkSpreadsheetFormat() - Show expected format');
     
     // Refresh slideshow data every 10 minutes
     setInterval(() => {
