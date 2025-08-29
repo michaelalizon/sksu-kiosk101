@@ -24,7 +24,7 @@ class SKSUKiosk {
         // Google Sheets configuration
         this.spreadsheetId = '1f74bbovZFgzWKTJnha4XEESEu6qWfBVLmMVu0XZvdYw';
         this.sheetName = 'Main';
-        this.apiKey = 'YOUR_API_KEY'; // You'll need to get this from Google Cloud Console
+        this.apiKey = 'AIzaSyBJJtGIUt90NVLXGydJ8EH63_WaQdfvmEk';
         
         // Update time every minute
         setInterval(() => {
@@ -45,10 +45,7 @@ class SKSUKiosk {
     }
 
     async fetchSlideshowData() {
-        // For now, we'll use sample data since we need an API key for Google Sheets
-        // To use real Google Sheets data, uncomment the fetch code below and add your API key
-        
-        /*
+        // Fetch data from Google Sheets
         const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${this.sheetName}?key=${this.apiKey}`;
         
         try {
@@ -62,18 +59,25 @@ class SKSUKiosk {
                 this.slides = rows.map(row => {
                     const slide = {};
                     headers.forEach((header, index) => {
-                        slide[header.toLowerCase().replace(' ', '_')] = row[index] || '';
+                        slide[header.toLowerCase().replace(/\s+/g, '_')] = row[index] || '';
                     });
                     return slide;
                 }).filter(slide => slide.image_url && slide.title);
+                
+                console.log('Fetched', this.slides.length, 'slides from Google Sheets');
+            } else {
+                console.warn('No data found in Google Sheets, using sample data');
+                this.loadSampleData();
             }
         } catch (error) {
             console.error('Error fetching Google Sheets data:', error);
-            throw error;
+            console.log('Falling back to sample data');
+            this.loadSampleData();
         }
-        */
-        
-        // Sample data for demonstration (replace with actual Google Sheets data)
+    }
+
+    loadSampleData() {
+        // Sample data as fallback
         this.slides = [
             {
                 image_url: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&h=400&fit=crop',
