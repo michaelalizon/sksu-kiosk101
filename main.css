@@ -1,0 +1,300 @@
+/* SKSU Interactive Kiosk Styles - Optimized for Large Displays */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1e7e34 0%, #28a745 50%, #20c997 100%);
+    min-height: 100vh;
+    color: #333;
+    overflow-x: hidden;
+    cursor: none; /* Hide cursor for kiosk mode */
+}
+
+.container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header Styles */
+.header {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 2rem 3rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border-bottom: 4px solid #28a745;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+}
+
+.logo {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+}
+
+.university-info h1 {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #1e7e34;
+    margin-bottom: 0.5rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.university-info p {
+    font-size: 1.2rem;
+    color: #666;
+    font-style: italic;
+}
+
+.contact-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-end;
+}
+
+.contact-item {
+    background: #28a745;
+    color: white;
+    padding: 0.8rem 1.5rem;
+    border-radius: 25px;
+    font-size: 1.1rem;
+    font-weight: 500;
+    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    padding: 3rem;
+}
+
+.welcome-section {
+    text-align: center;
+    margin-bottom: 3rem;
+    color: white;
+}
+
+.welcome-section h2 {
+    font-size: 3.5rem;
+    margin-bottom: 1rem;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+    animation: fadeInDown 1s ease-out;
+}
+
+.welcome-section p {
+    font-size: 1.5rem;
+    opacity: 0.9;
+    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.3);
+    animation: fadeInUp 1s ease-out 0.5s both;
+}
+
+/* Menu Grid */
+.menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.menu-item {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 2.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 2px solid transparent;
+    animation: fadeInUp 0.8s ease-out;
+}
+
+.menu-item:hover {
+    transform: translateY(-10px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    border-color: #28a745;
+    background: rgba(255, 255, 255, 1);
+}
+
+.menu-item:active {
+    transform: translateY(-5px) scale(0.98);
+}
+
+.menu-icon {
+    font-size: 4rem;
+    margin-bottom: 1.5rem;
+    display: block;
+    transition: transform 0.3s ease;
+}
+
+.menu-item:hover .menu-icon {
+    transform: scale(1.2) rotate(5deg);
+}
+
+.menu-item h3 {
+    font-size: 1.8rem;
+    color: #1e7e34;
+    margin-bottom: 1rem;
+    font-weight: bold;
+}
+
+.menu-item p {
+    font-size: 1.1rem;
+    color: #666;
+    line-height: 1.5;
+}
+
+/* Footer */
+.footer {
+    background: rgba(30, 126, 52, 0.95);
+    color: white;
+    padding: 2rem 3rem;
+    margin-top: auto;
+}
+
+.footer-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.footer-content p {
+    font-size: 1.1rem;
+}
+
+.social-links {
+    display: flex;
+    gap: 2rem;
+    align-items: center;
+}
+
+.social-links span {
+    font-size: 1.1rem;
+    margin-right: 1rem;
+}
+
+.social-link {
+    color: white;
+    text-decoration: none;
+    font-size: 1.1rem;
+    padding: 0.5rem 1rem;
+    border: 2px solid white;
+    border-radius: 20px;
+    transition: all 0.3s ease;
+}
+
+.social-link:hover {
+    background: white;
+    color: #1e7e34;
+    transform: translateY(-2px);
+}
+
+/* Animations */
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Touch-friendly styles for Raspberry Pi touchscreen */
+@media (max-width: 1920px) {
+    .menu-item {
+        min-height: 200px;
+        padding: 2rem;
+    }
+    
+    .menu-item h3 {
+        font-size: 1.6rem;
+    }
+    
+    .menu-item p {
+        font-size: 1rem;
+    }
+}
+
+/* Responsive adjustments for smaller displays */
+@media (max-width: 1024px) {
+    .header {
+        flex-direction: column;
+        text-align: center;
+        gap: 2rem;
+    }
+    
+    .university-info h1 {
+        font-size: 2rem;
+    }
+    
+    .welcome-section h2 {
+        font-size: 2.5rem;
+    }
+    
+    .menu-grid {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
+    }
+    
+    .menu-item {
+        padding: 2rem;
+    }
+}
+
+/* Idle state animations */
+.menu-item:nth-child(even) {
+    animation-delay: 0.2s;
+}
+
+.menu-item:nth-child(3n) {
+    animation-delay: 0.4s;
+}
+
+/* Auto-hide scrollbar for cleaner kiosk look */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
