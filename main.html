@@ -28,8 +28,25 @@
 
         <main class="main-content">
             <div class="welcome-section">
-                <h2>Welcome to SKSU Interactive Kiosk</h2>
-                <p>Your gateway to university information and services</p>
+                <h2>SKSU Announcements & Updates</h2>
+                <p>Stay informed with the latest news, achievements, and events</p>
+            </div>
+
+            <!-- Slideshow Section -->
+            <div class="slideshow-container" id="slideshowContainer">
+                <div class="slideshow-loading" id="slideshowLoading">
+                    <div class="loading-spinner"></div>
+                    <span>Loading announcements...</span>
+                </div>
+                
+                <!-- Slides will be dynamically generated here -->
+                
+                <!-- Navigation Controls -->
+                <button class="slide-control prev-btn" id="prevBtn" style="display: none;">❮</button>
+                <button class="slide-control next-btn" id="nextBtn" style="display: none;">❯</button>
+                
+                <!-- Navigation Dots -->
+                <div class="slideshow-nav" id="slideshowNav" style="display: none;"></div>
             </div>
 
             <div class="menu-grid">

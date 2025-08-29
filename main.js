@@ -1,10 +1,11 @@
-// SKSU Interactive Kiosk JavaScript - Optimized for Touch Interface
+// SKSU Interactive Kiosk JavaScript - Google Sheets Integration & Slideshow
 
 class SKSUKiosk {
     constructor() {
         this.init();
         this.setupEventListeners();
         this.startIdleTimer();
+        this.initializeSlideshow();
     }
 
     init() {
@@ -14,10 +15,231 @@ class SKSUKiosk {
         this.currentTime = new Date();
         this.updateDateTime();
         
+        // Slideshow properties
+        this.slides = [];
+        this.currentSlide = 0;
+        this.slideInterval = null;
+        this.slideTimer = 5000; // 5 seconds per slide
+        
+        // Google Sheets configuration
+        this.spreadsheetId = '1f74bbovZFgzWKTJnha4XEESEu6qWfBVLmMVu0XZvdYw';
+        this.sheetName = 'Main';
+        this.apiKey = 'YOUR_API_KEY'; // You'll need to get this from Google Cloud Console
+        
         // Update time every minute
         setInterval(() => {
             this.updateDateTime();
         }, 60000);
+    }
+
+    async initializeSlideshow() {
+        console.log('Initializing slideshow...');
+        try {
+            await this.fetchSlideshowData();
+            this.setupSlideshow();
+            this.startSlideshow();
+        } catch (error) {
+            console.error('Error initializing slideshow:', error);
+            this.showSlideshowError();
+        }
+    }
+
+    async fetchSlideshowData() {
+        // For now, we'll use sample data since we need an API key for Google Sheets
+        // To use real Google Sheets data, uncomment the fetch code below and add your API key
+        
+        /*
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${this.sheetName}?key=${this.apiKey}`;
+        
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.values && data.values.length > 1) {
+                const headers = data.values[0];
+                const rows = data.values.slice(1);
+                
+                this.slides = rows.map(row => {
+                    const slide = {};
+                    headers.forEach((header, index) => {
+                        slide[header.toLowerCase().replace(' ', '_')] = row[index] || '';
+                    });
+                    return slide;
+                }).filter(slide => slide.image_url && slide.title);
+            }
+        } catch (error) {
+            console.error('Error fetching Google Sheets data:', error);
+            throw error;
+        }
+        */
+        
+        // Sample data for demonstration (replace with actual Google Sheets data)
+        this.slides = [
+            {
+                image_url: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&h=400&fit=crop',
+                title: 'Electronics Engineers Licensure Exam Success',
+                description: 'Congratulations to ENGR. MON NATHANIEL L. BESANA for achieving TOP 2 (94.00%) in the April 2025 Electronics Engineers Licensure Examination! We are proud of our outstanding graduates.',
+                campus_id: 'SKSU Main Campus'
+            },
+            {
+                image_url: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&h=400&fit=crop',
+                title: 'New Academic Year 2025-2026 Enrollment',
+                description: 'Enrollment for Academic Year 2025-2026 is now open! Join Sultan Kudarat State University and be part of our growing community of scholars and innovators.',
+                campus_id: 'SKSU Main Campus'
+            },
+            {
+                image_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&h=400&fit=crop',
+                title: 'Research Excellence Awards 2025',
+                description: 'SKSU faculty and students receive recognition for outstanding research contributions in agriculture, engineering, and social sciences. Innovation continues to drive our mission.',
+                campus_id: 'SKSU Research Center'
+            },
+            {
+                image_url: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=800&h=400&fit=crop',
+                title: 'Community Extension Program Launch',
+                description: 'SKSU launches new community extension programs focusing on sustainable agriculture and skills development for local communities in Sultan Kudarat province.',
+                campus_id: 'SKSU Extension Office'
+            },
+            {
+                image_url: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&h=400&fit=crop',
+                title: 'New Laboratory Facilities Opened',
+                description: 'State-of-the-art computer and engineering laboratories now available for student use. Enhanced learning facilities support our commitment to quality education.',
+                campus_id: 'SKSU College of Engineering'
+            }
+        ];
+    }
+
+    setupSlideshow() {
+        const container = document.getElementById('slideshowContainer');
+        const loading = document.getElementById('slideshowLoading');
+        
+        if (this.slides.length === 0) {
+            this.showSlideshowError();
+            return;
+        }
+
+        // Hide loading
+        loading.style.display = 'none';
+
+        // Create slides HTML
+        this.slides.forEach((slide, index) => {
+            const slideElement = this.createSlideElement(slide, index);
+            container.appendChild(slideElement);
+        });
+
+        // Show navigation if multiple slides
+        if (this.slides.length > 1) {
+            this.setupNavigation();
+        }
+
+        // Show first slide
+        this.showSlide(0);
+    }
+
+    createSlideElement(slide, index) {
+        const slideDiv = document.createElement('div');
+        slideDiv.className = 'slide';
+        slideDiv.id = `slide-${index}`;
+        
+        slideDiv.innerHTML = `
+            <img src="${slide.image_url}" alt="${slide.title}" onerror="this.src='https://via.placeholder.com/800x400/28a745/ffffff?text=SKSU+Image'">
+            <div class="slide-content">
+                <h3>${slide.title}</h3>
+                <p>${slide.description}</p>
+                <div class="campus-info">${slide.campus_id}</div>
+            </div>
+        `;
+
+        return slideDiv;
+    }
+
+    setupNavigation() {
+        const container = document.getElementById('slideshowContainer');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const navContainer = document.getElementById('slideshowNav');
+
+        // Show controls
+        prevBtn.style.display = 'block';
+        nextBtn.style.display = 'block';
+        navContainer.style.display = 'flex';
+
+        // Create navigation dots
+        this.slides.forEach((_, index) => {
+            const dot = document.createElement('div');
+            dot.className = 'nav-dot';
+            dot.addEventListener('click', () => {
+                this.goToSlide(index);
+            });
+            navContainer.appendChild(dot);
+        });
+
+        // Add button event listeners
+        prevBtn.addEventListener('click', () => {
+            this.previousSlide();
+        });
+
+        nextBtn.addEventListener('click', () => {
+            this.nextSlide();
+        });
+    }
+
+    showSlide(index) {
+        // Hide all slides
+        document.querySelectorAll('.slide').forEach(slide => {
+            slide.classList.remove('active');
+        });
+
+        // Show current slide
+        const currentSlideElement = document.getElementById(`slide-${index}`);
+        if (currentSlideElement) {
+            currentSlideElement.classList.add('active');
+        }
+
+        // Update navigation dots
+        document.querySelectorAll('.nav-dot').forEach((dot, i) => {
+            dot.classList.toggle('active', i === index);
+        });
+
+        this.currentSlide = index;
+    }
+
+    nextSlide() {
+        const nextIndex = (this.currentSlide + 1) % this.slides.length;
+        this.goToSlide(nextIndex);
+    }
+
+    previousSlide() {
+        const prevIndex = (this.currentSlide - 1 + this.slides.length) % this.slides.length;
+        this.goToSlide(prevIndex);
+    }
+
+    goToSlide(index) {
+        this.showSlide(index);
+        this.resetSlideTimer();
+    }
+
+    startSlideshow() {
+        if (this.slides.length > 1) {
+            this.slideInterval = setInterval(() => {
+                this.nextSlide();
+            }, this.slideTimer);
+        }
+    }
+
+    resetSlideTimer() {
+        if (this.slideInterval) {
+            clearInterval(this.slideInterval);
+            this.startSlideshow();
+        }
+    }
+
+    showSlideshowError() {
+        const container = document.getElementById('slideshowContainer');
+        container.innerHTML = `
+            <div class="slideshow-loading">
+                <span style="color: #dc3545;">⚠️ Unable to load announcements. Please check your connection.</span>
+            </div>
+        `;
     }
 
     setupEventListeners() {
@@ -28,32 +250,15 @@ class SKSUKiosk {
                 this.handleMenuClick(e);
                 this.resetIdleTimer();
             });
-            
-            // Touch feedback
-            item.addEventListener('touchstart', (e) => {
-                item.style.transform = 'scale(0.95)';
-            });
-            
-            item.addEventListener('touchend', (e) => {
-                setTimeout(() => {
-                    item.style.transform = '';
-                }, 150);
-            });
         });
 
         // Reset idle timer on any interaction
         document.addEventListener('click', () => this.resetIdleTimer());
-        document.addEventListener('touchstart', () => this.resetIdleTimer());
         document.addEventListener('mousemove', () => this.resetIdleTimer());
         document.addEventListener('keypress', () => this.resetIdleTimer());
 
-        // Prevent context menu on long press (mobile/touch)
+        // Prevent context menu
         document.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-        });
-
-        // Prevent text selection for cleaner kiosk experience
-        document.addEventListener('selectstart', (e) => {
             e.preventDefault();
         });
     }
@@ -78,7 +283,7 @@ class SKSUKiosk {
         // Show loading state
         this.showLoadingState();
         
-        // Simulate navigation (replace with actual navigation logic)
+        // Simulate navigation
         setTimeout(() => {
             this.hideLoadingState();
             this.displaySectionContent(section);
@@ -88,7 +293,7 @@ class SKSUKiosk {
     displaySectionContent(section) {
         const sectionData = this.getSectionData(section);
         
-        // Create modal or page content
+        // Create modal
         const modal = this.createModal(sectionData);
         document.body.appendChild(modal);
         
@@ -449,7 +654,6 @@ class SKSUKiosk {
 
     updateDateTime() {
         this.currentTime = new Date();
-        // You can add a clock display if needed
         console.log('Current time:', this.currentTime.toLocaleString());
     }
 
@@ -475,76 +679,55 @@ class SKSUKiosk {
         // Scroll to top
         window.scrollTo({ top: 0, behavior: 'smooth' });
         
-        // Show idle message briefly
-        this.showIdleMessage();
+        // Restart slideshow if paused
+        this.resetSlideTimer();
     }
 
-    showIdleMessage() {
-        const message = document.createElement('div');
-        message.className = 'idle-message';
-        message.textContent = 'Welcome! Touch anywhere to begin.';
-        message.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(40, 167, 69, 0.9);
-            color: white;
-            padding: 2rem 3rem;
-            border-radius: 20px;
-            font-size: 1.5rem;
-            z-index: 1001;
-            animation: pulse 2s infinite;
-        `;
-        
-        document.body.appendChild(message);
-        
-        setTimeout(() => {
-            if (document.body.contains(message)) {
-                document.body.removeChild(message);
-            }
-        }, 5000);
-        
-        // Add pulse animation
-        if (!document.querySelector('.pulse-animation')) {
-            const style = document.createElement('style');
-            style.className = 'pulse-animation';
-            style.textContent = `
-                @keyframes pulse {
-                    0% { transform: translate(-50%, -50%) scale(1); }
-                    50% { transform: translate(-50%, -50%) scale(1.05); }
-                    100% { transform: translate(-50%, -50%) scale(1); }
-                }
-            `;
-            document.head.appendChild(style);
+    // Method to refresh slideshow data (can be called periodically)
+    async refreshSlideshow() {
+        try {
+            await this.fetchSlideshowData();
+            const container = document.getElementById('slideshowContainer');
+            
+            // Clear existing slides
+            const existingSlides = container.querySelectorAll('.slide');
+            existingSlides.forEach(slide => slide.remove());
+            
+            // Clear navigation
+            const navContainer = document.getElementById('slideshowNav');
+            navContainer.innerHTML = '';
+            
+            // Reset slideshow
+            this.currentSlide = 0;
+            clearInterval(this.slideInterval);
+            
+            // Setup new slideshow
+            this.setupSlideshow();
+            this.startSlideshow();
+            
+            console.log('Slideshow refreshed successfully');
+        } catch (error) {
+            console.error('Error refreshing slideshow:', error);
         }
     }
 }
 
 // Initialize the kiosk when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new SKSUKiosk();
+    const kiosk = new SKSUKiosk();
+    
+    // Refresh slideshow data every 10 minutes
+    setInterval(() => {
+        kiosk.refreshSlideshow();
+    }, 600000); // 10 minutes
 });
 
-// Prevent zoom on double tap (mobile)
-let lastTouchEnd = 0;
-document.addEventListener('touchend', (event) => {
+// Prevent zoom on double click
+let lastClickTime = 0;
+document.addEventListener('click', (event) => {
     const now = new Date().getTime();
-    if (now - lastTouchEnd <= 300) {
+    if (now - lastClickTime <= 300) {
         event.preventDefault();
     }
-    lastTouchEnd = now;
+    lastClickTime = now;
 }, false);
-
-// Prevent pinch zoom
-document.addEventListener('gesturestart', (e) => {
-    e.preventDefault();
-});
-
-document.addEventListener('gesturechange', (e) => {
-    e.preventDefault();
-});
-
-document.addEventListener('gestureend', (e) => {
-    e.preventDefault();
-});
